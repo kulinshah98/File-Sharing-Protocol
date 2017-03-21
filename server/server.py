@@ -1,4 +1,4 @@
-import socket, os, time, re, mimetypes, hashlib
+import socket, os, time, re, mimetypes, hashlib, threading
 
 
 def md5(fn):
@@ -21,10 +21,10 @@ def indexLongList(split_command):
         if not f_type:
             f_type = "Unknown"
         info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
-        print info, len(info)
+        #print info, len(info)
         conn.send(info)
         ans = conn.recv(1024)
-        print ans
+        #print ans
     conn.send("123")
 
 def indexShortList(split_command):
@@ -40,13 +40,13 @@ def indexShortList(split_command):
         f_type, code = mimetypes.guess_type(fl, False)
         if not f_type:
             f_type = "Unknown"
-        print mt, mint, maxt
+        #print mt, mint, maxt
         if mint <= os.path.getmtime(fl) <=maxt:
             info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
-            print info, len(info)
+            #print info, len(info)
             conn.send(info)
             ans = conn.recv(1024)
-            print ans
+            #print ans
     conn.send("123")
 
 def indexRegex(split_command):
@@ -63,12 +63,12 @@ def indexRegex(split_command):
         if not f_type:
             f_type = "Unknown"
         if reprog.match(fl):
-            print fl
+            #print fl
             info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
-            print info, len(info)
+            #print info, len(info)
             conn.send(info)
             ans = conn.recv(1024)
-            print ans
+            #print ans
     conn.send("123")
 
 def hashVerify(split_command):
@@ -100,7 +100,7 @@ def downloadTCP(split_command):
             for chunk in iter(lambda: f.read(4096), b""):
                 conn.send(chunk)
                 data = conn.recv(1024)
-                print data
+                #print data
         conn.send("END")
         data = conn.recv(1024)
     else:
@@ -119,7 +119,7 @@ def downloadUDP(split_command):
         t_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         t_sock.bind(("", 51216))
         data, (taddr, destinport) = t_sock.recvfrom(1024)
-        print data
+        #print data
         with open(filename, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 #print(chunk)
