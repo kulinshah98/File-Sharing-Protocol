@@ -90,8 +90,8 @@ def hashCheckAll(split_command):
         conn.send(st)
         ans = conn.recv(1024)
 
-def downloadTCP(split_command):
-    filename = split_command[2]
+def downloadTCP(fn1):
+    filename = fn1
     hashf = md5(filename)
     conn.send(hashf)
     signal = conn.recv(1024)
@@ -161,7 +161,7 @@ while True:
         conn.send("123")
     elif split_command[0]=="download":
         if split_command[1]=="TCP":
-            downloadTCP(split_command)
+            downloadTCP(split_command[2])
         elif split_command[1]=="UDP":
             downloadUDP(split_command)
         conn.send("123")
@@ -169,6 +169,16 @@ while True:
     elif split_command[0]=="close":
         print "Closing connection"
         break
+    elif split_command[0]=="sync":
+        list_files = os.listdir('.')
+        str_files = ""
+        for f in list_files:
+            str_files += f
+        conn.send(str_files)
+        for f in list_files:
+            downloadTCP(f)
+        conn.send("123")
+        data = conn.recv(1024)
     #print('Server received', repr(data))
 
 conn.close()

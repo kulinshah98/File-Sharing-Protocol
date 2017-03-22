@@ -23,7 +23,7 @@ def indexLongList(split_command, conn):
         info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
         #print info, len(info)
         conn.send(info)
-        ans = conn.recv(1024)
+        ans = conn.recv(4096)
         #print ans
     conn.send("123")
 
@@ -45,7 +45,7 @@ def indexShortList(split_command, conn):
             info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
             #print info, len(info)
             conn.send(info)
-            ans = conn.recv(1024)
+            ans = conn.recv(4096)
             #print ans
     conn.send("123")
 
@@ -62,12 +62,12 @@ def indexRegex(split_command, conn):
         f_type, code = mimetypes.guess_type(fl, False)
         if not f_type:
             f_type = "Unknown"
-        if reprog.match(fl):
+        if reprog.search(fl):
             #print fl
             info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
             #print info, len(info)
             conn.send(info)
-            ans = conn.recv(1024)
+            ans = conn.recv(4096)
             #print ans
     conn.send("123")
 
@@ -78,7 +78,7 @@ def hashVerify(split_command, conn):
     mt = time.ctime(fl_stat.st_mtime)
     st = str(check_sum) + " " + str(mt)
     conn.send(st)
-    ans = conn.recv(1024)
+    ans = conn.recv(4096)
 
 def hashCheckAll(split_command, conn):
     list_files = os.listdir('.')
@@ -88,21 +88,20 @@ def hashCheckAll(split_command, conn):
         mt = time.ctime(fl_stat.st_mtime)
         st = str(check_sum) + " " + str(mt)
         conn.send(st)
-        ans = conn.recv(1024)
+        ans = conn.recv(4096)
 
-def downloadTCP(split_command, conn):
-    filename = split_command[2]
+def downloadTCP(filename, conn):
     hashf = md5(filename)
     conn.send(hashf)
-    signal = conn.recv(1024)
+    signal = conn.recv(4096)
     if signal=="yes":
         with open(filename, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 conn.send(chunk)
-                data = conn.recv(1024)
+                data = conn.recv(4096)
                 #print data
         conn.send("END")
-        data = conn.recv(1024)
+        data = conn.recv(4096)
     else:
         pass
 
@@ -113,12 +112,12 @@ def downloadUDP(split_command, conn):
     mod_t = time.ctime(stat.st_mtime)
     hashval=md5(filename)
     conn.send(hashval)
-    signal = conn.recv(1024)
+    signal = conn.recv(4096)
     if signal=="yes":
         t_sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         t_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         t_sock.bind(("", 51216))
-        data, (taddr, destinport) = t_sock.recvfrom(1024)
+        data, (taddr, destinport) = t_sock.recvfrom(4096)
         #print data
         with open(filename, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
@@ -141,7 +140,7 @@ def server_func():
     print 'Got connection from', addr1
 
     while True:
-        command = conn1.recv(1024)
+        command = conn1.recv(4096)
         split_command = command.split()
         if split_command[0]=="index":
             if split_command[1]=="longlist":
@@ -158,11 +157,22 @@ def server_func():
             conn1.send("123")
         elif split_command[0]=="download":
             if split_command[1]=="TCP":
-                downloadTCP(split_command, conn1)
+                downloadTCP(split_command[2], conn1)
             elif split_command[1]=="UDP":
                 downloadUDP(split_command, conn1)
             conn1.send("123")
-            data = conn1.recv(1024)
+            data = conn1.recv(4096)
+        elif split_command[0]=="sync":
+            list_files = os.listdir('.')
+            str_files = ""
+            for f in list_files:
+                str_files += (f + " ")
+            conn1.send(str_files)
+            d = conn1.recv(4096)
+            for f in list_files:
+                downloadTCP(f, conn1)
+            conn1.send("123")
+            data = conn1.recv(4096)
         elif split_command[0]=="close":
             print "Closing connection"
             break
@@ -172,15 +182,15 @@ def server_func():
     print('Connection closed')
 
 
-def downloadTCPfile(split_command, s):
-    with open(split_command[2], "wb") as f:
+def downloadTCPfile(fn, s):
+    with open(fn, "wb") as f:
         #print "File Opened"
-        data = s.recv(1024)
+        data = s.recv(4096)
         s.send("Done")
         while data!="END":
             f.write(data)
             #print data
-            data = s.recv(1024)
+            data = s.recv(4096)
             s.send("Done")
 
 def downloadUDPfile(split_command, s):
@@ -190,7 +200,7 @@ def downloadUDPfile(split_command, s):
         #print("File opened")
         while True:
             #print("Receiving Data")
-            info, udpaddr = f_socket.recvfrom(1024)
+            info, udpaddr = f_socket.recvfrom(4096)
             #print(info)
             #print("Data=%s", (info))
             if info=="END":
@@ -202,7 +212,7 @@ def client_func():
     port1 = 51217
     s = socket.socket()
     host1 = ""
-
+    count2=0
     s.bind((host1, port1))
     s.listen(5)
     print 'Server listening....'
@@ -210,30 +220,36 @@ def client_func():
     print 'Got connection from', addr
 
     while True:
+        count2 = count2 + 1
+        command = ""
+        if count2%2==0:
+            print "Prompt ->",
+            command = raw_input()
+        elif count2%2==1 and count2>=3:
+            command = "sync"
         print "Prompt ->",
         command = raw_input()
         #print command
         conn.send(command)
-        count=0
         split_command = command.split()
         if split_command[0]=="download":
             if split_command[1]=="TCP":
-                hashfs = conn.recv(1024)
+                hashfs = conn.recv(4096)
                 if os.path.isfile(split_command[2]):
                     hashfc = md5(split_command[2])
                     #print str(hashfs), str(hashfc)
                     if str(hashfs)!=str(hashfc):
                         conn.send("yes")
                         print "Downloading File"
-                        downloadTCPfile(split_command, conn)
+                        downloadTCPfile(split_command[2], conn)
                     else:
                         conn.send("no")
                 else:
                     conn.send("yes")
                     print "Downloading File"
-                    downloadTCPfile(split_command, conn)
+                    downloadTCPfile(split_command[2], conn)
             elif split_command[1]=="UDP":
-                hashfs = conn.recv(1024)
+                hashfs = conn.recv(4096)
                 if os.path.isfile(split_command[2]):
                     hashfc = md5(split_command[2])
                     if str(hashfs)!=str(hashfc):
@@ -246,15 +262,33 @@ def client_func():
                     conn.send("yes")
                     print "Downloading File"
                     downloadUDPfile(split_command, conn)
+        elif split_command[0]=="sync":
+            list_files = conn.recv(4096).split()
+            conn.send("done")
+            for f in list_files:
+                hashfs = conn.recv(4096)
+                if os.path.isfile(f):
+                    hashfc = md5(f)
+                    print str(hashfs), str(hashfc)
+                    if str(hashfs)!=str(hashfc):
+                        conn.send("yes")
+                        print "Downloading File"
+                        downloadTCPfile(f, conn)
+                    else:
+                        conn.send("no")
+                else:
+                    conn.send("yes")
+                    print "Downloading File"
+                    downloadTCPfile(f, conn)
         elif split_command[0]=="close":
             print "Closing connection"
             break
 
-        data = conn.recv(1024)
+        data = conn.recv(4096)
         conn.send("done")
         while data!="123":
             print data
-            data = conn.recv(1024)
+            data = conn.recv(4096)
             conn.send("done")
         print command
     #f.close()
@@ -270,3 +304,4 @@ client_thread = threading.Thread(name='client', target=client_func)
 
 server_thread.start()
 client_thread.start()
+syncMode = 0
