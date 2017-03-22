@@ -62,7 +62,7 @@ def indexRegex(split_command, conn):
         f_type, code = mimetypes.guess_type(fl, False)
         if not f_type:
             f_type = "Unknown"
-        if reprog.match(fl):
+        if reprog.search(fl):
             info+='\t'.join([fl, sz, ct, mt, f_type])+'\n'
             conn.send(info)
             ans = conn.recv(4096)
@@ -83,7 +83,7 @@ def hashCheckAll(split_command, conn):
         check_sum = md5(fl)
         fl_stat = os.stat(fl)
         mt = time.ctime(fl_stat.st_mtime)
-        st = str(check_sum) + " " + str(mt)
+        st = str(fl) + "   " + str(check_sum) + "   " + str(mt)
         conn.send(st)
         ans = conn.recv(4096)
 
@@ -114,7 +114,7 @@ def downloadUDP(split_command, conn):
         t_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         t_sock.bind(("", 51218))
         data, (taddr, destinport) = t_sock.recvfrom(4096)
-        print data
+        #print data
         with open(filename, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 #print(chunk)
@@ -125,13 +125,10 @@ def downloadUDP(split_command, conn):
         pass
 
 def server_func():
-    print "started Client"
     s1 = socket.socket()
     host1 = ""
     port1 = 51217
-    print host1, port1
     s1.connect((host1, port1))
-    print "started Client"
     #s1.send("Hello server!")
 
     while True:
@@ -191,11 +188,8 @@ def server_func():
 
 
 def downloadTCPfile(fn12, s2):
-    print fn12
     with open(fn12, "wb") as f:
-        print "File Opened"
         data1 = s2.recv(4096)
-        print data1
         s2.send("Done")
         while data1!="END":
             f.write(data1)
@@ -210,7 +204,7 @@ def downloadUDPfile(split_command, s2):
         #print("File opened")
         #print info
         while True:
-            print("Receiving Data")
+            #print("Receiving Data")
             info, udpaddr = f_socket.recvfrom(4096)
             #print(info)
             #print("Data=%s", (info))
@@ -220,42 +214,47 @@ def downloadUDPfile(split_command, s2):
     f_socket.close()
 
 def client_func():
-    print "started Client"
     s = socket.socket()
     count1=1
     host = ""
     port = 51215
-    print host, port
     s.connect((host, port))
-    print "started Client"
     s.send("Hello server!")
-
+    syncMode1 = 0
     while True:
         count1 = count1 + 1
-        command = ""   
-        if count1%2==0:
-            print "Prompt ->",
-            command = raw_input()
-        elif count1%2==1 and count1>=3:
+        if syncMode1==0:
+            if count1%2==0:
+                print "Prompt ->",
+                command = raw_input()
+            elif count1%2==1 and count1>=3:
+                command = "sync"
+        elif syncMode1==1:
+            sleep(5)
             command = "sync"
-        print "=====", count1, command
+        elif syncMode1==2:
+            syncMode1=0
+
         s.send(command)
         split_command = command.split()
+
         if split_command[0]=="download":
-            if split_command[1]=="TCP":
+            if len(split_command)<3:
+                print "Invalid Command"
+            elif split_command[1]=="TCP":
                 hashfs = s.recv(4096)
                 if os.path.isfile(split_command[2]):
                     hashfc = md5(split_command[2])
-                    print str(hashfs), str(hashfc)
+                    #print str(hashfs), str(hashfc)
                     if str(hashfs)!=str(hashfc):
                         s.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", split_command[2]
                         downloadTCPfile(split_command[2], s)
                     else:
                         s.send("no")
                 else:
                     s.send("yes")
-                    print "Downloading File"
+                    print "Downloading File", split_command[2]
                     downloadTCPfile(split_command[2], s)
             elif split_command[1]=="UDP":
                 hashfs = s.recv(4096)
@@ -263,14 +262,18 @@ def client_func():
                     hashfc = md5(split_command[2])
                     if str(hashfs)!=str(hashfc):
                         s.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", split_command[2]
                         downloadUDPfile(split_command, s)
                     else:
                         s.send("no")
                 else:
                     s.send("yes")
-                    print "Downloading File"
+                    print "Downloading File", split_command[2]
                     downloadUDPfile(split_command, s)
+                hashfc = md5(split_command[2])
+                if str(hashfs)!=str(hashfc):
+                    print "Unsuccessful Download"
+                    syncMode1=2
         elif split_command[0]=="sync":
             list_files = s.recv(4096).split()
             s.send("done")
@@ -281,13 +284,13 @@ def client_func():
                     #print str(hashfs), str(hashfc)
                     if str(hashfs)!=str(hashfc):
                         s.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", f
                         downloadTCPfile(f, s)
                     else:
                         s.send("no")
                 else:
                     s.send("yes")
-                    print "Downloading File"
+                    print "Downloading File", f
                     downloadTCPfile(f, s)
         elif split_command[0]=="close":
             print "Closing connection"
@@ -299,7 +302,7 @@ def client_func():
             print data
             data = s.recv(4096)
             s.send("done")
-        print command
+        #print command
 
     s.close()
     print('Connection closed')

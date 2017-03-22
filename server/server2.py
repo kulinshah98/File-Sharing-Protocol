@@ -86,7 +86,7 @@ def hashCheckAll(split_command, conn):
         check_sum = md5(fl)
         fl_stat = os.stat(fl)
         mt = time.ctime(fl_stat.st_mtime)
-        st = str(check_sum) + " " + str(mt)
+        st = str(fl) + "   " + str(check_sum) + "   " + str(mt)
         conn.send(st)
         ans = conn.recv(4096)
 
@@ -135,9 +135,7 @@ def server_func():
 
     s1.bind((host, port))
     s1.listen(5)
-    print 'Server listening....'
     conn1, addr1 = s1.accept()
-    print 'Got connection from', addr1
 
     while True:
         command = conn1.recv(4096)
@@ -215,38 +213,42 @@ def client_func():
     count2=0
     s.bind((host1, port1))
     s.listen(5)
-    print 'Server listening....'
     conn, addr = s.accept()
-    print 'Got connection from', addr
+    syncMode = 0
 
     while True:
         count2 = count2 + 1
-        command = ""
-        if count2%2==0:
-            print "Prompt ->",
-            command = raw_input()
-        elif count2%2==1 and count2>=3:
-            command = "sync"
-        print "Prompt ->",
-        command = raw_input()
+        if syncMode==0:
+            if count2%2==0:
+                print "Prompt ->",
+                command = raw_input()
+            elif count2%2==1 and count2>=1:
+                command = "sync"
+        elif syncMode==1:
+            sleep(7)
+            command="sync"
+        elif syncMode==2:
+            syncMode=0
         #print command
         conn.send(command)
         split_command = command.split()
         if split_command[0]=="download":
-            if split_command[1]=="TCP":
+            if len(split_command)<3:
+                print "Invalid Command"
+            elif split_command[1]=="TCP":
                 hashfs = conn.recv(4096)
                 if os.path.isfile(split_command[2]):
                     hashfc = md5(split_command[2])
                     #print str(hashfs), str(hashfc)
                     if str(hashfs)!=str(hashfc):
                         conn.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", split_command[2]
                         downloadTCPfile(split_command[2], conn)
                     else:
                         conn.send("no")
                 else:
                     conn.send("yes")
-                    print "Downloading File"
+                    print "Downloading File",split_command[2]
                     downloadTCPfile(split_command[2], conn)
             elif split_command[1]=="UDP":
                 hashfs = conn.recv(4096)
@@ -254,14 +256,18 @@ def client_func():
                     hashfc = md5(split_command[2])
                     if str(hashfs)!=str(hashfc):
                         conn.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", split_command[2]
                         downloadUDPfile(split_command, conn)
                     else:
                         conn.send("no")
                 else:
                     conn.send("yes")
-                    print "Downloading File"
+                    print "Downloading File", split_command[2]
                     downloadUDPfile(split_command, conn)
+                hashfc = md5(split_command[2])
+                if str(hashfs)!=str(hashfc):
+                    print "Unsuccessful Download"
+                    syncMode=2
         elif split_command[0]=="sync":
             list_files = conn.recv(4096).split()
             conn.send("done")
@@ -269,16 +275,16 @@ def client_func():
                 hashfs = conn.recv(4096)
                 if os.path.isfile(f):
                     hashfc = md5(f)
-                    print str(hashfs), str(hashfc)
+                #    print str(hashfs), str(hashfc)
                     if str(hashfs)!=str(hashfc):
                         conn.send("yes")
-                        print "Downloading File"
+                        print "Downloading File", f
                         downloadTCPfile(f, conn)
                     else:
                         conn.send("no")
                 else:
                     conn.send("yes")
-                    print "Downloading File"
+                    print "Downloading File", f
                     downloadTCPfile(f, conn)
         elif split_command[0]=="close":
             print "Closing connection"
@@ -290,9 +296,8 @@ def client_func():
             print data
             data = conn.recv(4096)
             conn.send("done")
-        print command
+        #print command
     #f.close()
-
     conn.close()
     print('Connection closed')
 
@@ -304,4 +309,3 @@ client_thread = threading.Thread(name='client', target=client_func)
 
 server_thread.start()
 client_thread.start()
-syncMode = 0
